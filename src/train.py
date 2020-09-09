@@ -10,6 +10,7 @@ import random
 import logging
 import pickle
 import numpy as np
+import pdb
 from data import FaceImageIter
 from data import FaceImageIterList
 import mxnet as mx
@@ -124,8 +125,8 @@ class LossValueMetric(mx.metric.EvalMetric):
 def parse_args():
   parser = argparse.ArgumentParser(description='Train face network')
   # general
-  parser.add_argument('--data-dir', default='', help='training set directory')
-  parser.add_argument('--prefix', default='../model/model', help='directory to save model.')
+  parser.add_argument('--data-dir', default='/data/datasets/face/recognition/ms1m-retinaface-t1', help='training set directory')
+  parser.add_argument('--prefix', default='model/model', help='directory to save model.')
   parser.add_argument('--pretrained', default='', help='pretrained model to load')
   parser.add_argument('--ckpt', type=int, default=1, help='checkpoint saving option. 0: discard saving. 1: save when necessary. 2: always save')
   parser.add_argument('--network', default='r50', help='specify network')
@@ -140,7 +141,7 @@ def parse_args():
   parser.add_argument('--wd', type=float, default=0.0005, help='weight decay')
   parser.add_argument('--mom', type=float, default=0.9, help='momentum')
   parser.add_argument('--emb-size', type=int, default=512, help='embedding length')
-  parser.add_argument('--per-batch-size', type=int, default=128, help='batch size in each context')
+  parser.add_argument('--per-batch-size', type=int, default=8, help='batch size in each context')
   parser.add_argument('--margin-m', type=float, default=0.5, help='')
   parser.add_argument('--margin-s', type=float, default=64.0, help='')
   parser.add_argument('--margin-a', type=float, default=0.0, help='')
@@ -582,7 +583,7 @@ def get_symbol(args, arg_params, aux_params):
     extra_loss = mx.symbol.MakeLoss(triplet_loss)
   elif args.loss_type==9: #coco loss
     centroids = []
-    for i in xrange(args.per_identities):
+    for i in range(args.per_identities):
       xs = mx.symbol.slice_axis(embedding, axis=0, begin=i*args.images_per_identity, end=(i+1)*args.images_per_identity)
       mean = mx.symbol.mean(xs, axis=0, keepdims=True)
       mean = mx.symbol.L2Normalization(mean, mode='instance')
@@ -645,9 +646,10 @@ def get_symbol(args, arg_params, aux_params):
 
 def train_net(args):
     ctx = []
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     cvd = os.environ['CUDA_VISIBLE_DEVICES'].strip()
     if len(cvd)>0:
-      for i in xrange(len(cvd.split(','))):
+      for i in range(len(cvd.split(','))):
         ctx.append(mx.gpu(i))
     if len(ctx)==0:
       ctx = [mx.cpu()]
@@ -741,7 +743,7 @@ def train_net(args):
       print('loading', vec)
       _, arg_params, aux_params = mx.model.load_checkpoint(vec[0], int(vec[1]))
       sym, arg_params, aux_params = get_symbol(args, arg_params, aux_params)
-
+    # pdb.set_trace()
     data_extra = None
     hard_mining = False
     triplet_params = None
@@ -763,7 +765,7 @@ def train_net(args):
       data_extra = np.zeros( (args.batch_size, args.per_identities), dtype=np.float32)
       c = 0
       while c<args.batch_size:
-        for i in xrange(args.per_identities):
+        for i in range(args.per_identities):
           data_extra[c+i][i] = 1.0
         c+=args.per_batch_size
     elif args.loss_type==12 or args.loss_type==13:
@@ -893,7 +895,7 @@ def train_net(args):
 
     def ver_test(nbatch):
       results = []
-      for i in xrange(len(ver_list)):
+      for i in range(len(ver_list)):
         acc1, std1, acc2, std2, xnorm, embeddings_list = verification.test(ver_list[i], model, args.batch_size, 10, data_extra, label_shape)
         print('[%s][%d]XNorm: %f' % (ver_name_list[i], nbatch, xnorm))
         #print('[%s][%d]Accuracy: %1.5f+-%1.5f' % (ver_name_list[i], nbatch, acc1, std1))
@@ -924,7 +926,7 @@ def train_net(args):
       if args.loss_type>=1 and args.loss_type<=7:
         lr_steps = [100000, 140000, 160000]
       p = 512.0/args.batch_size
-      for l in xrange(len(lr_steps)):
+      for l in range(len(lr_steps)):
         lr_steps[l] = int(lr_steps[l]*p)
     else:
       lr_steps = [int(x) for x in args.lr_steps.split(',')]
